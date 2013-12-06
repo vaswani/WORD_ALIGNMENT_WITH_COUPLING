@@ -473,19 +473,22 @@ double ErrorsInAlignment(const map< pair<int,int>,char >&reference,const Vector<
 
 vcbList *globeTrainVcbList,*globfTrainVcbList;
 
-void runModel1Iterations(int Model1_Iterations,
+void runModel1Iterations(model1 &m1,
+    int Model1_Iterations,
     bool seedModel1,
     Dictionary *dictionary,
-    bool useDicttionary) {
+    bool useDictionary) {
   cout << "RUNNING MODEL 1"<<endl;
-  int minIter=0,ef_minIter=0,fe_minIter=0;
+  int minIter=0;
   for (int it=1; it<=Model1_Iterations; it++) {
     minIter=m1.em_with_tricks_single_iter(it,seedModel1,*dictionary, useDictionary);
-    errors=m1.errorsAL();
+    //errors=m1.errorsAL();
+    /*
     // RUNNING THE MODELS IN BOTH DIRECTOINS
     cout << "RUNNING E GIVEN F DIRECTION"<<endl;
     ef_minIter=ef_m1.em_with_tricks(Model1_Iterations,seedModel1,*dictionary, useDict);
     ef_errors=ef_m1.errorsAL();
+    */
   }
 
 }
@@ -549,7 +552,7 @@ double StartTraining(int&result)
   useDict = !dictionary_Filename.empty();
   if (useDict) dictionary = new Dictionary(dictionary_Filename.c_str());
   else dictionary = new Dictionary("");
-  int minIter=0,ef_minIter,fe_minIter;
+  int minIter=0,ef_minIter=0,fe_minIter=0;
   // MAKE COPIES OF THE T-TABLE, ONE FOR EACH DIRECTION
 #ifdef BINARY_SEARCH_FOR_TTABLE
   if( CoocurrenceFile.length()==0 )
@@ -679,7 +682,13 @@ double StartTraining(int&result)
 	   m1.load_table(t_Filename.c_str());
 	 }
    cout << "RUNNING MODEL 1"<<endl;
-	 minIter=m1.em_with_tricks(Model1_Iterations,seedModel1,*dictionary, useDict);
+	 //minIter=m1.em_with_tricks(Model1_Iterations,seedModel1,*dictionary, useDict);
+   runModel1Iterations(m1,
+    Model1_Iterations,
+    seedModel1,
+    dictionary,
+    useDict);
+
 	 errors=m1.errorsAL();
    // RUNNING THE MODELS IN BOTH DIRECTOINS
    cout << "RUNNING E GIVEN F DIRECTION"<<endl;
