@@ -305,8 +305,8 @@ public:
 			     const double fTotal, 
 			     const bool actual = false ) const;
   void normalizeTable(const vcbList&engl, const vcbList&french, int iter=2);
-  void getCounts(vector<vector<COUNT> >* expCntsVec,vector<double> *rowwiseExpCntsSum);
-  void getProbs(vector<vector<PROB> >*probsVec);
+  void getCounts(vector<vector<COUNT> >* expCntsVec,vector<double> *rowwiseExpCntsSum) const  ;
+  void getProbs(vector<vector<PROB> >*probsVec) const ;
   void setProbs(const vector<vector<PROB> >&probsVec);
   void readProbTable(const char *filename); 
 };

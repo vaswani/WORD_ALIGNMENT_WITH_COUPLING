@@ -103,6 +103,8 @@ public:
   inline int getNoFrenchWords(void)  const {return noFrenchWords;};
   inline tmodel<COUNT, PROB>& getTTable(void) {return tTable;};
   inline string& getEFFilename(void) {return efFilename;};
+  const tmodel<COUNT, PROB> &getTtable() const {return tTable;};
+
  private:
   void em_loop(int it,Perplexity& perp, sentenceHandler& sHandler1, bool seedModel1, bool , const char*, Dictionary& dictionary, bool useDict, 
 	       Perplexity& viterbiperp, bool=false);

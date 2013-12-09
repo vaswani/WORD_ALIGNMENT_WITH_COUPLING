@@ -18,6 +18,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, 
 USA.
 
+@ASHISH VASWANI: ef indicates the e given f model. fe indicates the f given e model
 */
 
 #include <sstream>
@@ -681,26 +682,58 @@ double StartTraining(int&result)
 	   seedModel1 = true ;
 	   m1.load_table(t_Filename.c_str());
 	 }
+   /*
    cout << "RUNNING MODEL 1"<<endl;
-	 //minIter=m1.em_with_tricks(Model1_Iterations,seedModel1,*dictionary, useDict);
    runModel1Iterations(m1,
     Model1_Iterations,
     seedModel1,
     dictionary,
     useDict);
+   */
+   // RUNNING THE MODELS IN BOTH DIRECTOINS, ONE ITERATION AT A TIME
+  for (int it=1; it<=Model1_Iterations; it++) {
+    cout<<" Running regular model 1 for iteration "<<it<<endl;
+    minIter=m1.em_with_tricks_single_iter(it,seedModel1,*dictionary, useDict);
+    cout<<" Running e given f model 1 for iteration "<<it<<endl;
+    ef_minIter=ef_m1.em_with_tricks_single_iter(it,seedModel1,*dictionary, useDict);
+    cout<<" Running f given e model 1 for iteration "<<it<<endl;
+    fe_minIter=fe_m1.em_with_tricks_single_iter(it,seedModel1,*dictionary, useDict);
 
-	 errors=m1.errorsAL();
-   // RUNNING THE MODELS IN BOTH DIRECTOINS
+    // STORING EXPECTED COUNTS
+    vector<vector<COUNT> > ef_expCntsVec,ef_probsVec;
+    vector<vector<COUNT> > fe_expCntsVec,fe_probsVec;
+    vector<double> ef_rowwiseExpCntsSum,fe_rowwiseExpCntsSum;
+    cout<<" ACCUMULATING EXPECTED COUNTS FROM E given F"<<endl;
+    ef_m1.getTtable().getCounts(&ef_expCntsVec,&ef_rowwiseExpCntsSum);
+    //printCounts(expCntsVec);
+    //getchar();
+    cout<<" ACCUMULATING PROBABILITIES FROM E GIVEN F"<<endl;
+    ef_m1.getTtable().getProbs(&ef_probsVec);
+
+    cout<<" ACCUMULATING EXPECTED COUNTS FROM E given F"<<endl;
+    fe_m1.getTtable().getCounts(&fe_expCntsVec,&fe_rowwiseExpCntsSum);
+    //printCounts(expCntsVec);
+    //getchar();
+    cout<<" ACCUMULATING PROBABILITIES FROM E GIVEN F"<<endl;
+    fe_m1.getTtable().getProbs(&fe_probsVec);
+
+    //printCounts(probsVec);
+    //getchar();
+
+
+  }
+   /*
+   cout<< "RUNNING REGULAR MODEL 1"<<endl;
+	 minIter=m1.em_with_tricks(Model1_Iterations,seedModel1,*dictionary, useDict);
    cout << "RUNNING E GIVEN F DIRECTION"<<endl;
 	 ef_minIter=ef_m1.em_with_tricks(Model1_Iterations,seedModel1,*dictionary, useDict);
-	 ef_errors=ef_m1.errorsAL();
-
-
    cout << "RUNNING F GIVEN E DIRECTION"<<endl;
 	 fe_minIter=fe_m1.em_with_tricks(Model1_Iterations,seedModel1,*dictionary, useDict);
-	 fe_errors=fe_m1.errorsAL();
+   */
 
-
+   errors=m1.errorsAL();
+   ef_errors=ef_m1.errorsAL();
+   fe_errors=fe_m1.errorsAL();
        }
        
 	 {

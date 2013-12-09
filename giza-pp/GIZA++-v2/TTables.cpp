@@ -79,7 +79,7 @@ void tmodel<COUNT, PROB>::printProbTableInverse(const char *,
 
 // Collecting the probabilities per row
 template <class COUNT, class PROB>
-void tmodel<COUNT,PROB>::getCounts(vector<vector<COUNT> >*expCntsVec,vector<double> *rowwiseExpCntsSum) {
+void tmodel<COUNT,PROB>::getCounts(vector<vector<COUNT> >*expCntsVec,vector<double> *rowwiseExpCntsSum) const {
   for(unsigned int i=0;i<lexmat.size();++i)
   {
 
@@ -100,7 +100,7 @@ void tmodel<COUNT,PROB>::getCounts(vector<vector<COUNT> >*expCntsVec,vector<doub
 
 // Collecting the expected counts and the expected counts sum per row
 template <class COUNT, class PROB>
-void tmodel<COUNT,PROB>::getProbs(vector<vector<PROB> >*probsVec) {
+void tmodel<COUNT,PROB>::getProbs(vector<vector<PROB> >*probsVec) const {
   for(unsigned int i=0;i<lexmat.size();++i)
   {
     vector<COUNT> rowProbsVec;

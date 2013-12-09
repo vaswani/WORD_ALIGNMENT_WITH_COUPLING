@@ -113,8 +113,8 @@ int model1::em_with_tricks_single_iter(int iterationNumber, /*Perplexity& perp, 
   //getchar();
   cout<<" Accumulating probabilities"<<endl;
   tTable.getProbs(&probsVec);
-  printCounts(probsVec);
-  getchar();
+  //printCounts(probsVec);
+  //getchar();
   cout<<" Normalizing t table"<<endl; 
   tTable.normalizeTable(Elist, Flist);
 
@@ -184,6 +184,7 @@ int model1::em_with_tricks(int noIterations, /*Perplexity& perp, sentenceHandler
       if( OutputInAachenFormat==1 )
 	tTable.printCountTable(tfile.c_str(),Elist.getVocabList(),Flist.getVocabList(),1);
     }
+    /*
     // accumulate expected counts
     vector<vector<COUNT> > expCntsVec,probsVec;
     vector<double> rowwiseExpCntsSum;
@@ -193,9 +194,9 @@ int model1::em_with_tricks(int noIterations, /*Perplexity& perp, sentenceHandler
     //getchar();
     cout<<" Accumulating probabilities"<<endl;
     tTable.getProbs(&probsVec);
-    printCounts(probsVec);
-    getchar();
-    
+    //printCounts(probsVec);
+    //getchar();
+    */
     tTable.normalizeTable(Elist, Flist);
 
     cout << modelName << ": ("<<it<<") TRAIN CROSS-ENTROPY " << perp.cross_entropy()
