@@ -40,6 +40,7 @@ USA.
 #include "D5Tables.h"
 #include "transpair_model4.h"
 #include "transpair_model5.h"
+#include "projectedGradientDescent.h"
 
 #define ITER_M2 0
 #define ITER_MH 5
@@ -57,7 +58,8 @@ GLOBAL_PARAMETER(float, REG_LAMBDA,"regLambda","Lambda for the regularlization",
 GLOBAL_PARAMETER(float, PROB_SMOOTH,"probSmooth","probability smoothing (floor) value ",PARLEV_OPTHEUR,1e-7);
 GLOBAL_PARAMETER(float, MINCOUNTINCREASE,"minCountIncrease","minimal count increase",PARLEV_OPTHEUR,1e-7);
 GLOBAL_PARAMETER(double, ARMIJO_BETA,"armijo_beta","pgd optimization parameter beta used in armijo line search",PARLEV_EM,0.1);
-GLOBAL_PARAMETER(double, ETA,"eta","pgd optimization parameter eta used in armijo line search",PARLEV_EM,0.1);
+GLOBAL_PARAMETER(double, ETA,"eta","pgd optimization parameter eta used in armijo line search",PARLEV_EM,0.9);
+GLOBAL_PARAMETER(int, NUM_PGD_ITERATIONS,"num_pgd_iterations","number of pgd iterations we need to carry out",PARLEV_EM,100);
 
 
 GLOBAL_PARAMETER2(int,Transfer_Dump_Freq,"TRANSFER DUMP FREQUENCY","t2to3","output: dump of transfer from Model 2 to 3",PARLEV_OUTPUT,0);
@@ -97,7 +99,7 @@ string Prefix, LogFilename, OPath, Usage,
   n_Filename, dictionary_Filename,EFCorpusFilename,FECorpusFilename;
 
 ofstream logmsg ;
-const string str2Num(int n){
+const string str2Num(int n) {
   string number = "";
   do{
     number.insert((size_t)0, 1, (char)(n % 10 + '0'));
@@ -167,7 +169,6 @@ const char*stripPath(const char*fullpath)
   else
     return ptr;
 }
-
 
 void printDecoderConfigFile()
 {
@@ -260,6 +261,53 @@ void printDecoderConfigFile()
       */
 }
 
+void runPGDMStep(
+    model1 &ef_m1,
+    model1 &fe_m1,
+    const float reg_lambda,
+    const vector<vector<pair<unsigned int,unsigned int> > > &ef_map) {
+  cout<<"Running PGD m-step"<<endl;
+  //running the PGD m step
+  // STORING EXPECTED COUNTS
+  vector<vector<float> > ef_expCntsVec,ef_probsVec;
+  vector<vector<float> > fe_expCntsVec,fe_probsVec;
+  vector<vector<float> > ef_optimizedProbs,fe_optimizedProbs;
+  vector<float> ef_rowwiseExpCntsSum,fe_rowwiseExpCntsSum;
+  cout<<" ACCUMULATING EXPECTED COUNTS FROM E given F"<<endl;
+  ef_m1.getTtable().getCounts(&ef_expCntsVec,&ef_rowwiseExpCntsSum);
+  //printCounts(ef_expCntsVec);
+  //getchar();
+  cout<<" ACCUMULATING PROBABILITIES FROM E GIVEN F"<<endl;
+  ef_m1.getTtable().getProbs(&ef_probsVec);
+  //cout<<"Printing the ef probs"<<endl;
+  //printCounts(ef_probsVec);
+  //getchar();
+  cout<<" ACCUMULATING EXPECTED COUNTS FROM E given F"<<endl;
+  fe_m1.getTtable().getCounts(&fe_expCntsVec,&fe_rowwiseExpCntsSum);
+  //printCounts(ef_expCntsVec);
+  //getchar();
+
+  cout<<" ACCUMULATING PROBABILITIES FROM E GIVEN F"<<endl;
+  fe_m1.getTtable().getProbs(&fe_probsVec);
+  //printCounts(fe_probsVec);
+  //getchar();
+  //now normalize table
+  projectedGradientDescentWithArmijoRule(
+    ef_expCntsVec,
+    ef_probsVec,
+    ef_rowwiseExpCntsSum,
+    ef_optimizedProbs,
+    fe_expCntsVec,
+    fe_probsVec,
+    fe_rowwiseExpCntsSum,
+    fe_optimizedProbs,
+    reg_lambda,
+    ef_map);
+  // After running PGD, we need to assign probs into the
+  // t-table
+  ef_m1.getMutableTtable().setProbs(ef_optimizedProbs);
+  fe_m1.getMutableTtable().setProbs(fe_optimizedProbs);
+}
 
 void printAllTables(vcbList& eTrainVcbList, vcbList& eTestVcbList,
 		    vcbList& fTrainVcbList, vcbList& fTestVcbList, model1& m1)
@@ -690,7 +738,19 @@ double StartTraining(int&result)
     dictionary,
     useDict);
    */
-   // RUNNING THE MODELS IN BOTH DIRECTOINS, ONE ITERATION AT A TIME
+   // EF MAP contains a mapping from the ef expected counts
+   // vector of vector to the fe expected counts vector of
+   // of vector. Each entry ef_map[i][j] = <a,b> means that
+   // for the english word i (since the expected counts and probs
+   // are in english word order), the jth position in the expected
+   // counts and probs vector corresponds to the french word 'a'
+   // and for the french word 'a', the english word 'i' has an
+   // entry in the 'b' th position in its expected counts 
+   // and probs row
+  
+  vector<vector<pair<unsigned int,unsigned int> > > ef_map;
+  ef_m1.getTtable().buildEFMap(ef_map,fe_m1.getTtable().getLexmat());
+  // RUNNING THE MODELS IN BOTH DIRECTOINS, ONE ITERATION AT A TIME
   for (int it=1; it<=Model1_Iterations; it++) {
     cout<<" Running regular model 1 for iteration "<<it<<endl;
     minIter=m1.em_with_tricks_single_iter(it,seedModel1,*dictionary, useDict);
@@ -698,39 +758,33 @@ double StartTraining(int&result)
     ef_minIter=ef_m1.em_with_tricks_single_iter(it,seedModel1,*dictionary, useDict);
     cout<<" Running f given e model 1 for iteration "<<it<<endl;
     fe_minIter=fe_m1.em_with_tricks_single_iter(it,seedModel1,*dictionary, useDict);
-
-    // STORING EXPECTED COUNTS
-    vector<vector<COUNT> > ef_expCntsVec,ef_probsVec;
-    vector<vector<COUNT> > fe_expCntsVec,fe_probsVec;
-    vector<double> ef_rowwiseExpCntsSum,fe_rowwiseExpCntsSum;
-    cout<<" ACCUMULATING EXPECTED COUNTS FROM E given F"<<endl;
-    ef_m1.getTtable().getCounts(&ef_expCntsVec,&ef_rowwiseExpCntsSum);
-    //printCounts(expCntsVec);
-    //getchar();
-    cout<<" ACCUMULATING PROBABILITIES FROM E GIVEN F"<<endl;
-    ef_m1.getTtable().getProbs(&ef_probsVec);
-
-    cout<<" ACCUMULATING EXPECTED COUNTS FROM E given F"<<endl;
-    fe_m1.getTtable().getCounts(&fe_expCntsVec,&fe_rowwiseExpCntsSum);
-    //printCounts(expCntsVec);
-    //getchar();
-    cout<<" ACCUMULATING PROBABILITIES FROM E GIVEN F"<<endl;
-    fe_m1.getTtable().getProbs(&fe_probsVec);
-
+    vector<vector<float> > ef_optimizedProbs,fe_optimizedProbs;
+    //RUNNING THE PGD M STEP for ef_m1 and fe_m1
+    if (it >= 2) {
+      runPGDMStep(
+          ef_m1,
+          fe_m1,
+          REG_LAMBDA,
+          ef_map);
+    } else {
+      ef_m1.normalizeTable();
+      fe_m1.normalizeTable();
+    }
+    // Assgining the optimized probabilities
+    
+    //RUNNING THE STANDARD M STEP FOR m1
+    m1.normalizeTable();
     //printCounts(probsVec);
     //getchar();
-
-
   }
-   /*
+  /*
    cout<< "RUNNING REGULAR MODEL 1"<<endl;
 	 minIter=m1.em_with_tricks(Model1_Iterations,seedModel1,*dictionary, useDict);
    cout << "RUNNING E GIVEN F DIRECTION"<<endl;
 	 ef_minIter=ef_m1.em_with_tricks(Model1_Iterations,seedModel1,*dictionary, useDict);
    cout << "RUNNING F GIVEN E DIRECTION"<<endl;
 	 fe_minIter=fe_m1.em_with_tricks(Model1_Iterations,seedModel1,*dictionary, useDict);
-   */
-
+  */
    errors=m1.errorsAL();
    ef_errors=ef_m1.errorsAL();
    fe_errors=fe_m1.errorsAL();

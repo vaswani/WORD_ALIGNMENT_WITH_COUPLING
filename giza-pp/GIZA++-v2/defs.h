@@ -45,7 +45,15 @@ const int MAX_W=457979;
 extern double LAMBDA; // Lambda that is used to scale cross_entropy factor
 
 typedef float PROB ;
-typedef float COUNT ;
+typedef float COUNT;
+
+// @ASHISH VASWANI
+// extern double REG_LAMBDA; // Lambda for regularlizing the parameters
+extern double ARMIJO_BETA ;
+extern double ARMIJO_SIGMA ;
+extern double ETA ;
+extern int NUM_PGD_ITERATIONS;
+
  
 class LogProb {
  private:

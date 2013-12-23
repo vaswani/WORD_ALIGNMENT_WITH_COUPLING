@@ -79,7 +79,7 @@ void tmodel<COUNT, PROB>::printProbTableInverse(const char *,
 
 // Collecting the probabilities per row
 template <class COUNT, class PROB>
-void tmodel<COUNT,PROB>::getCounts(vector<vector<COUNT> >*expCntsVec,vector<double> *rowwiseExpCntsSum) const {
+void tmodel<COUNT,PROB>::getCounts(vector<vector<float> >*expCntsVec,vector<float> *rowwiseExpCntsSum) const {
   for(unsigned int i=0;i<lexmat.size();++i)
   {
 
@@ -114,6 +114,59 @@ void tmodel<COUNT,PROB>::getProbs(vector<vector<PROB> >*probsVec) const {
     probsVec->push_back(rowProbsVec);
   }
 }
+
+template <class COUNT, class PROB>
+void tmodel<COUNT,PROB>::buildEFMap(
+    vector<vector <pair<unsigned int,unsigned int> > > &ef_map,
+    const vector< vector<pair<unsigned int,CPPair> >* > &target_lexmat) const {
+  ef_map.resize(lexmat.size());
+  vector<pair<unsigned int,unsigned int> > rowwise_ef_map;
+  // FIRST FILLING UP THE INDEX OF THE FRENCH WORD IN position i,j.
+  cout<<"Building the lexical matrix"<<endl;
+  for(unsigned int i=0;i<lexmat.size();++i)
+  { 
+    if( lexmat[i] )
+	  {
+	    unsigned int lSize=lexmat[i]->size();
+	    for(unsigned int j=0;j<lSize;++j) {
+        pair<unsigned int,unsigned int> ef_pair;
+        ef_pair.first = (*lexmat[i])[j].first;
+        rowwise_ef_map.push_back(ef_pair);
+      }
+	  }
+
+    ef_map[i] = rowwise_ef_map;
+    rowwise_ef_map.clear();
+  }
+  // FILLING UP THE POSITION OF THE english word 'i' in the row of
+  // FRENCH WORD 'j'
+  for(unsigned int i=0;i<target_lexmat.size();++i)
+  { 
+    if( target_lexmat[i] )
+	  {
+	    unsigned int lSize=target_lexmat[i]->size();
+	    for(unsigned int j=0;j<lSize;++j) {
+        unsigned int english_word_id = (*target_lexmat[i])[j].first;
+        // You have to first search where the french word id lies
+        // in the row of english word
+        int ith_french_word_position_in_ef_map = 0;
+        while(ef_map[english_word_id][ith_french_word_position_in_ef_map].first != i) {
+          ith_french_word_position_in_ef_map++;
+        }
+        ef_map[english_word_id][ith_french_word_position_in_ef_map].second = j;
+        //cout<<"The french word "<<i<<" is in the "<<ith_french_word_position_in_ef_map<<" position of "
+        //  "the english word "<<english_word_id<<" which is in the "<<j<<" position of the french word"<<endl;
+      }
+	  }
+  }
+}
+
+/*
+// For every entry in the ef table, this holds the index of the english and the french word in the corpus. 
+void tmodel::getEFIndexMapping(vector<vector<vector<unsigned int> > > *ef_table_to_fe_table_mapping) {
+
+}
+*/
 
 // Setting the probabilities from the probsVector
 template <class COUNT, class PROB>

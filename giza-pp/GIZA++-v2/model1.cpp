@@ -23,6 +23,7 @@ USA.
 #include "Globals.h"
 #include "utility.h"
 #include "Parameter.h"
+//#include "projectedGradientDescent.h"
 
 extern short NoEmptyWord;
 extern int VerboseSentence;
@@ -106,7 +107,7 @@ int model1::em_with_tricks_single_iter(int iterationNumber, /*Perplexity& perp, 
   }
   // accumulate expected counts
   vector<vector<COUNT> > expCntsVec,probsVec;
-  vector<double> rowwiseExpCntsSum;
+  vector<float> rowwiseExpCntsSum;
   cout<<" Accumulating expected counts "<<endl;
   tTable.getCounts(&expCntsVec,&rowwiseExpCntsSum);
   //printCounts(expCntsVec);
@@ -116,7 +117,7 @@ int model1::em_with_tricks_single_iter(int iterationNumber, /*Perplexity& perp, 
   //printCounts(probsVec);
   //getchar();
   cout<<" Normalizing t table"<<endl; 
-  tTable.normalizeTable(Elist, Flist);
+  //tTable.normalizeTable(Elist, Flist);
 
   cout << modelName << ": ("<<it<<") TRAIN CROSS-ENTROPY " << perp.cross_entropy()
     << " PERPLEXITY " << perp.perplexity() << '\n';

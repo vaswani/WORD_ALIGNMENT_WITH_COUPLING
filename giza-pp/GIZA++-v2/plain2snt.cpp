@@ -72,7 +72,9 @@ int main(int argc,char**argv)
 	      if( id1.find(word)==id1.end() )
 		{
 		  iid1.push_back(word);
+      cout<<"The size of iid1 is "<<iid1.size()<<endl;
 		  id1[word]=iid1.size()-1;
+      cout<<"the word "<<word<<" was given the id "<<id1[word]<<endl;
 		}
 	    }
 	  istringstream ii2(line2);
@@ -83,7 +85,9 @@ int main(int argc,char**argv)
 	      if( id2.find(word)==id2.end() )
 		{
 		  iid2.push_back(word);
+      cout<<"The size of iid2 is "<<iid1.size()<<endl;
 		  id2[word]=iid2.size()-1;
+      cout<<"the word "<<word<<" was given the id "<<id2[word]<<endl;
 		}
 	    }
 	  double w=1.0;
