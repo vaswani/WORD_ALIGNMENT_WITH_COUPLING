@@ -64,8 +64,11 @@ void model1::initialize_table_uniformly(sentenceHandler& sHandler1){
 
 //@ASHISH VASWANI: A FUNCTION THAT RUNS A SINGLE ITERATION OF MODEL1. WILL BE NEEDED TO RUN E-F and 
 //F-E SEPARATELY
-int model1::em_with_tricks_single_iter(int iterationNumber, /*Perplexity& perp, sentenceHandler& sHandler1, */
-			    bool seedModel1, Dictionary& dictionary, bool useDict /*Perplexity* testPerp, sentenceHandler* testHandler, 
+int model1::em_with_tricks_e_step(int iterationNumber, /*Perplexity& perp, sentenceHandler& sHandler1, */
+			    bool seedModel1,
+          Dictionary& dictionary,
+          bool useDict,
+          string model_prefix /*Perplexity* testPerp, sentenceHandler* testHandler, 
 										     Perplexity& trainViterbiPerp, Perplexity* testViterbiPerp */ )
 {
   double minErrors=1.0;int minIter=0;
@@ -89,9 +92,9 @@ int model1::em_with_tricks_single_iter(int iterationNumber, /*Perplexity& perp, 
   do{
     number.insert((size_t)0, 1, (char)(n % 10 + '0'));
   } while((n /= 10) > 0);
-  tfile = Prefix + ".t" + shortModelName + "." + number ;
-  alignfile = Prefix + ".A" + shortModelName + "." + number ;
-  test_alignfile = Prefix +".tst.A" + shortModelName + "." + number ;
+  tfile = Prefix + ".t" + model_prefix + "." + shortModelName + "." + number ;
+  alignfile = Prefix + ".A" + model_prefix + "." + shortModelName + "." + number ;
+  test_alignfile = Prefix +".tst.A" + model_prefix + "." + shortModelName + "." + number ;
   initAL();
   em_loop(it,perp, sHandler1, seedModel1, dump_files, alignfile.c_str(), dictionary, useDict, trainViterbiPerp); 
   if (testPerp && testHandler) // calculate test perplexity
@@ -105,6 +108,8 @@ int model1::em_with_tricks_single_iter(int iterationNumber, /*Perplexity& perp, 
     if( OutputInAachenFormat==1 )
       tTable.printCountTable(tfile.c_str(),Elist.getVocabList(),Flist.getVocabList(),1);
   }
+
+  /*
   // accumulate expected counts
   vector<vector<COUNT> > expCntsVec,probsVec;
   vector<float> rowwiseExpCntsSum;
@@ -118,7 +123,9 @@ int model1::em_with_tricks_single_iter(int iterationNumber, /*Perplexity& perp, 
   //getchar();
   cout<<" Normalizing t table"<<endl; 
   //tTable.normalizeTable(Elist, Flist);
+  */
 
+  /*
   cout << modelName << ": ("<<it<<") TRAIN CROSS-ENTROPY " << perp.cross_entropy()
     << " PERPLEXITY " << perp.perplexity() << '\n';
   if (testPerp && testHandler)
@@ -135,6 +142,7 @@ int model1::em_with_tricks_single_iter(int iterationNumber, /*Perplexity& perp, 
     if( OutputInAachenFormat==0 )
       tTable.printProbTable(tfile.c_str(),Elist.getVocabList(),Flist.getVocabList(),OutputInAachenFormat);
   }
+  */
   it_fn = time(NULL);
   cout << "Model 1 Iteration: " << it<< " took: " << difftime(it_fn, it_st) << " seconds\n";
   //}
@@ -144,6 +152,36 @@ int model1::em_with_tricks_single_iter(int iterationNumber, /*Perplexity& perp, 
   return minIter;
 }
 
+void model1::printTableAndReport(int it,
+    string model_prefix) {
+  string modelName="Model1",shortModelName="1";
+  bool dump_files = false ;
+  dump_files = (Model1_Dump_Freq != 0) &&  ((it % Model1_Dump_Freq)  == 0) && !NODUMPS ;
+  string number = "";
+  int n = it;
+
+  do{
+    number.insert((size_t)0, 1, (char)(n % 10 + '0'));
+  } while((n /= 10) > 0);
+
+  string tfile = Prefix + ".t" + model_prefix + "." + shortModelName + "." + number ;
+  cout << modelName << ": ("<<it<<") TRAIN CROSS-ENTROPY " << perp.cross_entropy()
+    << " PERPLEXITY " << perp.perplexity() << '\n';
+  if (testPerp && testHandler)
+    cout << modelName << ": ("<<it<<") TEST CROSS-ENTROPY " << (*testPerp).cross_entropy()
+      << " PERPLEXITY " << (*testPerp).perplexity() 
+      << '\n';
+  cout << modelName << ": ("<<it<<") VITERBI TRAIN CROSS-ENTROPY " << trainViterbiPerp.cross_entropy()
+ << " PERPLEXITY " << trainViterbiPerp.perplexity() << '\n';
+  if (testPerp && testHandler)
+    cout << modelName << ": ("<<it<<") VITERBI TEST CROSS-ENTROPY " << (*testViterbiPerp).cross_entropy()
+      << " PERPLEXITY " << (*testViterbiPerp).perplexity() 
+      << '\n';
+  if (dump_files){
+    if( OutputInAachenFormat==0 )
+      tTable.printProbTable(tfile.c_str(),Elist.getVocabList(),Flist.getVocabList(),OutputInAachenFormat);
+  }
+}
 
 int model1::em_with_tricks(int noIterations, /*Perplexity& perp, sentenceHandler& sHandler1, */
 			    bool seedModel1, Dictionary& dictionary, bool useDict /*Perplexity* testPerp, sentenceHandler* testHandler, 

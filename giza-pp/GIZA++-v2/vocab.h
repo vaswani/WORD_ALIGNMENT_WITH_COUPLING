@@ -33,8 +33,10 @@ class WordEntry {
  public:
   string word ;
   double freq ;
-  WordEntry():word("\0"), freq(0){};
-  WordEntry(string w, int f):word(w), freq(f){};
+  double prob ;
+  WordEntry():word("\0"), freq(0),prob(0){};
+  WordEntry(string w, int f):word(w), freq(f),prob(0) {};
+  WordEntry(string w, int f, double p):word(w), freq(f),prob(p) {};
 };
 
 class vcbList{
@@ -97,6 +99,10 @@ class vcbList{
       if (list[i].word != "" && list[i].freq > 0)
 	of << i << ' ' << list[i].word << ' ' << list[i].freq << '\n';
     }
+  }
+  void computeUnigramProbs();
+  float getProbForWord(int i) {
+    return(list[i].prob);
   }
   
 };

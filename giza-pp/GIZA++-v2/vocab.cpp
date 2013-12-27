@@ -88,3 +88,15 @@ void vcbList::readVocabList()
   } // end of while
 }
 
+//ASHISH VASWANI: COMPUTING THE UNIGRAM PROBABILITIES
+void vcbList::computeUnigramProbs() {
+  double total = 0;
+  for (unsigned int i=0; i<list.size(); i++){
+    total += list[i].freq;
+  }
+  for (unsigned int i=0; i<list.size(); i++){
+   list[i].prob = list[i].freq/total;
+   //cout<<"The unigram prob of "<<list[i].word<<" is "<<list[i].prob<<endl;
+  }
+}
+

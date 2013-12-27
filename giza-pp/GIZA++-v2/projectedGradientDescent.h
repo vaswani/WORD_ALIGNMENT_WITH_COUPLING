@@ -3,6 +3,8 @@
 #include <iostream>
 //#include "defs.h"
 #include <omp.h>
+//#include "vocab.h"
+
 
 //declaring the global parameters for em with smoothed l0
 /*
@@ -14,7 +16,6 @@ GLOBAL_PARAMETER(float, L0_ALPHA,"smoothed_l0_alpha","optimization parameter bet
 
 
 using namespace std;
-
 
 void inline printVector(vector<float> & v)
 {
@@ -94,7 +95,10 @@ float L2_reg_func_value(
        const vector<vector<float> > &  fe_current_points,
        const vector<float> &rowwiseExpCntsSum,
        const vector<vector<pair<unsigned int,unsigned int> > > &ef_map,
-       float reg_lambda) {
+       float reg_lambda,
+       vcbList &eTrainVcbList,
+       vcbList &fTrainVcbList,
+       regularization_type reg_option) {
  	int num_conditionals = ef_current_points.size();
 	float func_value = 0.0;
   #pragma omp parallel for firstprivate (num_conditionals) reduction(+ : func_value ) 
@@ -107,13 +111,30 @@ float L2_reg_func_value(
     for (unsigned int j=0; j<ef_map[i].size(); j++) {
       unsigned int f_position =  ef_map[i][j].first;
       unsigned int e_position_in_f_row = ef_map[i][j].second;
-      conditional_func_value += (ef_current_points[i][j] - 
-                    fe_current_points[f_position][e_position_in_f_row])*
-                    (ef_current_points[i][j] - 
-                    fe_current_points[f_position][e_position_in_f_row]);
+      if (reg_option == CONDITIONAL) {
+        float reg_term = ef_current_points[i][j] - 
+                    fe_current_points[f_position][e_position_in_f_row];
+        conditional_func_value += reg_term*reg_term;
+      }
+      if (reg_option == JOINT) {
+        float reg_term = ef_current_points[i][j]* eTrainVcbList.getProbForWord(i) - 
+          fe_current_points[f_position][e_position_in_f_row]*fTrainVcbList.getProbForWord(f_position);
+
+        conditional_func_value += reg_term*reg_term;
+      }
     }
+    /*
+    // THIS IS IF THE CONSTRAINTS ARE ON THE JOINTS
+    for (unsigned int j=0; j<ef_map[i].size(); j++) {
+      unsigned int f_position =  ef_map[i][j].first;
+      double reg_term = ef_current_points[i][j]* eTrainVcbList[i] - 
+                    fe_current_points[f_position][e_position_in_f_row]*fTrainVcbList[f_position];
+      conditional_func_value += reg_term*reg_term;
+    */
     func_value += conditional_func_value;
   }
+  //cout<<"the l2 reg function value inside the loop was "<<func_value<<endl;
+  //cout<<"reg_lambda was "<<reg_lambda<<endl;
   return (func_value*reg_lambda);
    
 }
@@ -138,7 +159,7 @@ float parallelExpectedLLCompute(
     for (unsigned int j=0; j<current_points[i].size(); j++) {
       if (current_points[i][j] == 0.0 && expected_counts[i][j] != 0.0)
       {
-        cout<<"the probability in position "<<j<<" was 0"<<" and the fractional count was not 0"<<endl;
+        cerr<<"the probability in position "<<j<<" was 0"<<" and the fractional count was not 0"<<endl;
         exit(0);
       }
       if (current_points[i][j] != 0.0 and expected_counts[i][j] != 0)
@@ -170,11 +191,14 @@ inline float evalFunction(
     const vector<vector<float> > & fe_current_points,
     const vector<float> & fe_rowwiseExpCntsSum,
     const float reg_lambda,
-    const vector<vector<pair<unsigned int,unsigned int> > > &ef_map)
+    const vector<vector<pair<unsigned int,unsigned int> > > &ef_map,
+    vcbList &eTrainVcbList,
+    vcbList &fTrainVcbList,
+    regularization_type reg_option)
 {
   //cout<<"In eval function"<<endl;
   float func_value = 0.;
-
+  float L2_func_value;
   // FIRST COMPUTING THE EXPECTED COMPLETE DATA LOG LIKELIHOOD IN e given f directiona
   //cout<<"Computing expected complete data LL in the e|f direction"<<endl;
   func_value -= parallelExpectedLLCompute(
@@ -189,12 +213,17 @@ inline float evalFunction(
     fe_rowwiseExpCntsSum);
   // Now computing the regularization constant. 
   // For now, the L2 norm
-   func_value += L2_reg_func_value(
+   L2_func_value += L2_reg_func_value(
        ef_current_points,
        fe_current_points,
        ef_rowwiseExpCntsSum,
        ef_map,
-       reg_lambda);
+       reg_lambda,
+       eTrainVcbList,
+       fTrainVcbList,
+       reg_option);
+   func_value += L2_func_value;
+   cerr<<"The L2 reg func value was "<<L2_func_value<<endl;
 	return(func_value);
 }
 
@@ -204,20 +233,41 @@ void L2_reg_gradient(
       const vector<vector<float> > &fe_current_points,
       vector<vector<float> > &fe_gradients,
       float reg_lambda,
-      const vector<vector<pair<unsigned int,unsigned int> > > &ef_map) {
+      const vector<vector<pair<unsigned int,unsigned int> > > &ef_map,
+      vcbList &eTrainVcbList,
+      vcbList &fTrainVcbList,
+      regularization_type reg_option) {
   
   //First computing the gradient in the ef direction
   int num_conditionals = ef_current_points.size();
   #pragma omp parallel for firstprivate(num_conditionals)
   for(int i=0; i<num_conditionals; i++) {
-    for (unsigned int j=0; j<ef_current_points[i].size(); j++) {
+    for (unsigned int j=0; j<ef_map[i].size(); j++) {
       unsigned int f_position =  ef_map[i][j].first;
       unsigned int e_position_in_f_row = ef_map[i][j].second;
-      float gradient_value = 2*(ef_current_points[i][j] - 
-                    fe_current_points[f_position][e_position_in_f_row]);
+      if (reg_option == CONDITIONAL) {
+        float gradient_value = reg_lambda*2*(ef_current_points[i][j] - 
+                      fe_current_points[f_position][e_position_in_f_row]);
+        ef_gradients[i][j] += gradient_value;
+        fe_gradients[f_position][e_position_in_f_row] -= gradient_value;
+      }
+      if (reg_option == JOINT) {
+        float gradient_value = reg_lambda*2*(ef_current_points[i][j]*eTrainVcbList.getProbForWord(i) - 
+            fe_current_points[f_position][e_position_in_f_row])*fTrainVcbList.getProbForWord(f_position);
+        ef_gradients[i][j] += gradient_value;
+        fe_gradients[f_position][e_position_in_f_row] -= gradient_value;
+      }
+    }
+    /*
+    // THIS IS IF THE CONSTRAINTS ARE ON THE JOINTS
+    for (unsigned int j=0; j<ef_current_points[i].size(); j++) {
+      unsigned int f_position =  ef_map[i][j].first;
+      float gradient_value = 2*(ef_current_points[i][j]*eTrainVcbList[i] - 
+                    fe_current_points[f_position][e_position_in_f_row])*fTrainVcbList[f_position];
       ef_gradients[i][j] += gradient_value;
       fe_gradients[f_position][e_position_in_f_row] -= gradient_value;
-    }
+    */
+
   }
 }
 void evalGradientFromExpLogLikelihood(
@@ -236,7 +286,7 @@ void evalGradientFromExpLogLikelihood(
     for (unsigned int j=0; j<expected_counts[i].size(); j++) {
       if (current_points[i][j] == 0 && expected_counts[i][j] != 0.0 )
       {
-        cout<<"the probability in position "<<j<<" was 0"<<" and the fractional count was not 0"<<endl;
+        cerr<<"the probability in position "<<j<<" was 0"<<" and the fractional count was not 0"<<endl;
         exit(0);
       }
       if (current_points[i][j] != 0.0)
@@ -258,7 +308,10 @@ void inline evalGradient(
       const vector<float> &fe_rowwiseExpCntsSum,
       vector<vector<float> > &fe_gradients,
       float reg_lambda,
-      const vector<vector<pair<unsigned int,unsigned int> > > &ef_map) {
+      const vector<vector<pair<unsigned int,unsigned int> > > &ef_map,
+      vcbList &eTrainVcbList,
+      vcbList &fTrainVcbList,
+      regularization_type reg_option) {
 
   evalGradientFromExpLogLikelihood(
       ef_expected_counts,
@@ -270,13 +323,17 @@ void inline evalGradient(
       fe_rowwiseExpCntsSum,
       fe_current_points,
       fe_gradients);
+
   L2_reg_gradient(
       ef_current_points,
       ef_gradients,
       fe_current_points,
       fe_gradients,
       reg_lambda,
-      ef_map);
+      ef_map,
+      eTrainVcbList,
+      fTrainVcbList,
+      reg_option);
 }
 
 void zeroInitVectorOfVector(
@@ -380,8 +437,12 @@ void projectedGradientDescentWithArmijoRule(
     const vector<float> & fe_rowwiseExpCntsSum,
     vector<vector<float> > & fe_optimized_probs,
     float reg_lambda,
-    const vector<vector<pair<unsigned int,unsigned int> > > &ef_map) {
+    const vector<vector<pair<unsigned int,unsigned int> > > &ef_map,
+    vcbList &eTrainVcbList,
+    vcbList &fTrainVcbList,
+    regularization_type reg_option) {
   float eta = ETA;
+  cerr<<"the regularization option is "<<reg_option<<endl;
   /*
   cout<<"The ef expected counts are "<<ef_expected_counts<<endl;
   cout<<"The fe expected counts are "<<fe_expected_counts<<endl;
@@ -400,8 +461,8 @@ void projectedGradientDescentWithArmijoRule(
   cerr<<"Performing PGD iterations"<<endl;
 	for (int time = 1; time <= NUM_PGD_ITERATIONS; time++)
 	{
-    eta /time;
-		cout<<"time is"<<time<<endl;
+    eta = eta /time;
+		cerr<<"time is"<<time<<endl;
 		float current_function_value = evalFunction(
       ef_expected_counts,
       ef_current_points,
@@ -410,8 +471,11 @@ void projectedGradientDescentWithArmijoRule(
       fe_current_points,
       fe_rowwiseExpCntsSum,
       reg_lambda,
-      ef_map);
-    cout<<"The function value was "<<current_function_value<<endl;
+      ef_map,
+      eTrainVcbList,
+      fTrainVcbList,
+      reg_option);
+    cerr<<"The function value was "<<current_function_value<<endl;
     //cerr<<"initializing current gradient"<<endl;
     // INITIAZLIZING THE CURRENT GRADIENTS 
 		vector<vector<float> > ef_gradients,fe_gradients;
@@ -433,7 +497,10 @@ void projectedGradientDescentWithArmijoRule(
       fe_rowwiseExpCntsSum,
       fe_gradients,
       reg_lambda,
-      ef_map);
+      ef_map,
+      eTrainVcbList,
+      fTrainVcbList,
+      reg_option);
     
     vector<vector<float> > ef_new_points,fe_new_points;
     ef_new_points = vector<vector<float> >(ef_current_probs.size());
@@ -568,7 +635,10 @@ void projectedGradientDescentWithArmijoRule(
         fe_temp_points,
         fe_rowwiseExpCntsSum,
         reg_lambda,
-        ef_map);
+        ef_map,
+        eTrainVcbList,
+        fTrainVcbList,
+        reg_option);
 			//cout<<"function value at temp point is "<<func_value_at_temp_point<<endl;
 			//printf ("function value at temp point is %.15f and the iteration number is %d \n",func_value_at_temp_point,num_steps);
 			//printf ("current alpha is %.15f\n",current_alpha);

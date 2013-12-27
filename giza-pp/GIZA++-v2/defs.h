@@ -53,7 +53,14 @@ extern double ARMIJO_BETA ;
 extern double ARMIJO_SIGMA ;
 extern double ETA ;
 extern int NUM_PGD_ITERATIONS;
+extern bool conditional_reg;
+extern bool joint_reg;
 
+
+enum regularization_type {
+  JOINT,
+  CONDITIONAL
+};
  
 class LogProb {
  private:

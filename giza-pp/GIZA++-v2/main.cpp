@@ -22,6 +22,7 @@ USA.
 */
 
 #include <sstream>
+#include "defs.h"
 #include "getSentence.h"
 #include "TTables.h"
 #include "model1.h"
@@ -29,7 +30,6 @@ USA.
 #include "model3.h"
 #include "hmm.h"
 #include "file_spec.h"
-#include "defs.h"
 #include "vocab.h"
 #include "Perplexity.h"
 #include "Dictionary.h"
@@ -41,6 +41,7 @@ USA.
 #include "transpair_model4.h"
 #include "transpair_model5.h"
 #include "projectedGradientDescent.h"
+#include "pgdUtil.h"
 
 #define ITER_M2 0
 #define ITER_MH 5
@@ -60,7 +61,8 @@ GLOBAL_PARAMETER(float, MINCOUNTINCREASE,"minCountIncrease","minimal count incre
 GLOBAL_PARAMETER(double, ARMIJO_BETA,"armijo_beta","pgd optimization parameter beta used in armijo line search",PARLEV_EM,0.1);
 GLOBAL_PARAMETER(double, ETA,"eta","pgd optimization parameter eta used in armijo line search",PARLEV_EM,0.9);
 GLOBAL_PARAMETER(int, NUM_PGD_ITERATIONS,"num_pgd_iterations","number of pgd iterations we need to carry out",PARLEV_EM,100);
-
+GLOBAL_PARAMETER(bool,conditional_reg,"conditional_regularization","Do regularization of the conditionals",PARLEV_EM,0);
+GLOBAL_PARAMETER(bool,joint_reg,"joint_regularization","Do regularization of the joint parameters",PARLEV_EM,0);
 
 GLOBAL_PARAMETER2(int,Transfer_Dump_Freq,"TRANSFER DUMP FREQUENCY","t2to3","output: dump of transfer from Model 2 to 3",PARLEV_OUTPUT,0);
 GLOBAL_PARAMETER2(bool,Verbose,"verbose","v","0: not verbose; 1: verbose",PARLEV_OUTPUT,0);
@@ -258,63 +260,20 @@ void printDecoderConfigFile()
       << "LogFile = - # empty means: no log, dash means: STDOUT\n"
       << "LogLM = true # log language model lookups\n"
       << "LogTM = true # log translation model lookups\n";
-      */
+   */
 }
 
-void runPGDMStep(
-    model1 &ef_m1,
-    model1 &fe_m1,
-    const float reg_lambda,
-    const vector<vector<pair<unsigned int,unsigned int> > > &ef_map) {
-  cout<<"Running PGD m-step"<<endl;
-  //running the PGD m step
-  // STORING EXPECTED COUNTS
-  vector<vector<float> > ef_expCntsVec,ef_probsVec;
-  vector<vector<float> > fe_expCntsVec,fe_probsVec;
-  vector<vector<float> > ef_optimizedProbs,fe_optimizedProbs;
-  vector<float> ef_rowwiseExpCntsSum,fe_rowwiseExpCntsSum;
-  cout<<" ACCUMULATING EXPECTED COUNTS FROM E given F"<<endl;
-  ef_m1.getTtable().getCounts(&ef_expCntsVec,&ef_rowwiseExpCntsSum);
-  //printCounts(ef_expCntsVec);
-  //getchar();
-  cout<<" ACCUMULATING PROBABILITIES FROM E GIVEN F"<<endl;
-  ef_m1.getTtable().getProbs(&ef_probsVec);
-  //cout<<"Printing the ef probs"<<endl;
-  //printCounts(ef_probsVec);
-  //getchar();
-  cout<<" ACCUMULATING EXPECTED COUNTS FROM E given F"<<endl;
-  fe_m1.getTtable().getCounts(&fe_expCntsVec,&fe_rowwiseExpCntsSum);
-  //printCounts(ef_expCntsVec);
-  //getchar();
 
-  cout<<" ACCUMULATING PROBABILITIES FROM E GIVEN F"<<endl;
-  fe_m1.getTtable().getProbs(&fe_probsVec);
-  //printCounts(fe_probsVec);
-  //getchar();
-  //now normalize table
-  projectedGradientDescentWithArmijoRule(
-    ef_expCntsVec,
-    ef_probsVec,
-    ef_rowwiseExpCntsSum,
-    ef_optimizedProbs,
-    fe_expCntsVec,
-    fe_probsVec,
-    fe_rowwiseExpCntsSum,
-    fe_optimizedProbs,
-    reg_lambda,
-    ef_map);
-  // After running PGD, we need to assign probs into the
-  // t-table
-  ef_m1.getMutableTtable().setProbs(ef_optimizedProbs);
-  fe_m1.getMutableTtable().setProbs(fe_optimizedProbs);
-}
-
-void printAllTables(vcbList& eTrainVcbList, vcbList& eTestVcbList,
-		    vcbList& fTrainVcbList, vcbList& fTestVcbList, model1& m1)
+void printAllTables(vcbList& eTrainVcbList,
+    vcbList& eTestVcbList,
+		vcbList& fTrainVcbList,
+    vcbList& fTestVcbList,
+    model1& m1)
 {
   cerr << "writing Final tables to Disk \n";
   string t_inv_file = Prefix + ".ti.final" ;
   if( !FEWDUMPS)
+    cout<<"We are printing the inverse probability table to "<<t_inv_file.c_str()<<endl;
     m1.getTTable().printProbTableInverse(t_inv_file.c_str(), m1.getEnglishVocabList(), 
 					 m1.getFrenchVocabList(), 
 					 m1.getETotalWCount(), 
@@ -522,25 +481,6 @@ double ErrorsInAlignment(const map< pair<int,int>,char >&reference,const Vector<
 
 vcbList *globeTrainVcbList,*globfTrainVcbList;
 
-void runModel1Iterations(model1 &m1,
-    int Model1_Iterations,
-    bool seedModel1,
-    Dictionary *dictionary,
-    bool useDictionary) {
-  cout << "RUNNING MODEL 1"<<endl;
-  int minIter=0;
-  for (int it=1; it<=Model1_Iterations; it++) {
-    minIter=m1.em_with_tricks_single_iter(it,seedModel1,*dictionary, useDictionary);
-    //errors=m1.errorsAL();
-    /*
-    // RUNNING THE MODELS IN BOTH DIRECTOINS
-    cout << "RUNNING E GIVEN F DIRECTION"<<endl;
-    ef_minIter=ef_m1.em_with_tricks(Model1_Iterations,seedModel1,*dictionary, useDict);
-    ef_errors=ef_m1.errorsAL();
-    */
-  }
-
-}
 double StartTraining(int&result)
 { 
   double errors=0.0,ef_errors = 0.0,fe_errors = 0.0;
@@ -570,6 +510,12 @@ double StartTraining(int&result)
 
   ef_corpus = new sentenceHandler(EFCorpusFilename.c_str(), &fTrainVcbList, &eTrainVcbList);
   fe_corpus = new sentenceHandler(FECorpusFilename.c_str(), &eTrainVcbList, &fTrainVcbList);
+  
+
+  //COMPUTING THE UNIGRAM PROBS OF THE WORDS
+  eTrainVcbList.computeUnigramProbs();
+  fTrainVcbList.computeUnigramProbs();
+
 
   if (TestCorpusFilename == "NONE")
     TestCorpusFilename = "";
@@ -697,7 +643,7 @@ double StartTraining(int&result)
 	     x=testCorpus;
 	   cout << "Text corpus exists.\n";
 	   x->rewind();
-	   while(x&&x->getNextSentence(sent)){
+	   while(x&&x->getNextSentence(sent)) {
 	     Vector<WordIndex>& es = sent.eSent;
 	     Vector<WordIndex>& fs = sent.fSent;
 	     int l=es.size()-1;
@@ -750,14 +696,17 @@ double StartTraining(int&result)
   
   vector<vector<pair<unsigned int,unsigned int> > > ef_map;
   ef_m1.getTtable().buildEFMap(ef_map,fe_m1.getTtable().getLexmat());
+  cout<< "RUNNING REGULAR MODEL 1"<<endl;
+	minIter=m1.em_with_tricks(Model1_Iterations,seedModel1,*dictionary, useDict);
+
   // RUNNING THE MODELS IN BOTH DIRECTOINS, ONE ITERATION AT A TIME
   for (int it=1; it<=Model1_Iterations; it++) {
-    cout<<" Running regular model 1 for iteration "<<it<<endl;
-    minIter=m1.em_with_tricks_single_iter(it,seedModel1,*dictionary, useDict);
+    //cout<<" Running regular model 1 for iteration "<<it<<endl;
+    //minIter=m1.em_with_tricks_e_step(it,seedModel1,*dictionary, useDict);
     cout<<" Running e given f model 1 for iteration "<<it<<endl;
-    ef_minIter=ef_m1.em_with_tricks_single_iter(it,seedModel1,*dictionary, useDict);
+    ef_minIter=ef_m1.em_with_tricks_e_step(it,seedModel1,*dictionary, useDict,"ef");
     cout<<" Running f given e model 1 for iteration "<<it<<endl;
-    fe_minIter=fe_m1.em_with_tricks_single_iter(it,seedModel1,*dictionary, useDict);
+    fe_minIter=fe_m1.em_with_tricks_e_step(it,seedModel1,*dictionary, useDict,"fe");
     vector<vector<float> > ef_optimizedProbs,fe_optimizedProbs;
     //RUNNING THE PGD M STEP for ef_m1 and fe_m1
     if (it >= 2) {
@@ -765,11 +714,16 @@ double StartTraining(int&result)
           ef_m1,
           fe_m1,
           REG_LAMBDA,
-          ef_map);
+          ef_map,
+          eTrainVcbList,
+          fTrainVcbList);
     } else {
       ef_m1.normalizeTable();
       fe_m1.normalizeTable();
     }
+    ef_m1.printTableAndReport(it,"ef");
+    fe_m1.printTableAndReport(it,"fe");
+
     // Assgining the optimized probabilities
     
     //RUNNING THE STANDARD M STEP FOR m1
@@ -777,9 +731,7 @@ double StartTraining(int&result)
     //printCounts(probsVec);
     //getchar();
   }
-  /*
-   cout<< "RUNNING REGULAR MODEL 1"<<endl;
-	 minIter=m1.em_with_tricks(Model1_Iterations,seedModel1,*dictionary, useDict);
+   /*
    cout << "RUNNING E GIVEN F DIRECTION"<<endl;
 	 ef_minIter=ef_m1.em_with_tricks(Model1_Iterations,seedModel1,*dictionary, useDict);
    cout << "RUNNING F GIVEN E DIRECTION"<<endl;
@@ -791,12 +743,13 @@ double StartTraining(int&result)
        }
        
 	 {
-	   if(Model2_Iterations > 0){
+	   if(Model2_Iterations > 0) {
 	     m2.initialize_table_uniformly(*corpus);
 	     minIter=m2.em_with_tricks(Model2_Iterations);
 	     errors=m2.errorsAL();
 	   }
-	   if(HMM_Iterations > 0){
+
+	   if(HMM_Iterations > 0) {
 	     cout << "NOTE: I am doing iterations with the HMM model!\n";
 	     h.makeWordClasses(m1.Elist,m1.Flist,SourceVocabFilename+".classes",TargetVocabFilename+".classes");
 	     h.initialize_table_uniformly(*corpus);

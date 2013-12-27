@@ -40,6 +40,7 @@ void tmodel<COUNT, PROB>::printProbTable(const char *filename,
 					 const Vector<WordEntry>& fvlist,
 					 const bool actual) const
 {
+  //cout<<"We are in print prob table"<<endl;
   ofstream of(filename);
   /*  for(unsigned int i=0;i<es.size()-1;++i)
     for(unsigned int j=es[i];j<es[i+1];++j)
@@ -122,8 +123,16 @@ void tmodel<COUNT,PROB>::buildEFMap(
   ef_map.resize(lexmat.size());
   vector<pair<unsigned int,unsigned int> > rowwise_ef_map;
   // FIRST FILLING UP THE INDEX OF THE FRENCH WORD IN position i,j.
+  // Since the null word is not symmetric, i.e. we have null only 
+  // on one side of the bitext, the probabilities e|null and f|null
+  // will not be considered for joint or conditional regularization
+  // and therefore will not appear in the ef map. Null occupies
+  // position 0 in the lexmat and therefore we start our outer loops
+  // from the 1st word. I guess we should start at 2 since the 1st 
+  // word is always empty. Don't know why
+  unsigned int ef_map_size = 0;
   cout<<"Building the lexical matrix"<<endl;
-  for(unsigned int i=0;i<lexmat.size();++i)
+  for(unsigned int i=1;i<lexmat.size();++i)
   { 
     if( lexmat[i] )
 	  {
@@ -132,15 +141,17 @@ void tmodel<COUNT,PROB>::buildEFMap(
         pair<unsigned int,unsigned int> ef_pair;
         ef_pair.first = (*lexmat[i])[j].first;
         rowwise_ef_map.push_back(ef_pair);
+        ef_map_size++;
       }
 	  }
 
     ef_map[i] = rowwise_ef_map;
     rowwise_ef_map.clear();
   }
+  cout<<"The number of entries in the ef map was "<<ef_map_size<<endl;
   // FILLING UP THE POSITION OF THE english word 'i' in the row of
   // FRENCH WORD 'j'
-  for(unsigned int i=0;i<target_lexmat.size();++i)
+  for(unsigned int i=1;i<target_lexmat.size();++i)
   { 
     if( target_lexmat[i] )
 	  {
@@ -152,7 +163,22 @@ void tmodel<COUNT,PROB>::buildEFMap(
         int ith_french_word_position_in_ef_map = 0;
         while(ef_map[english_word_id][ith_french_word_position_in_ef_map].first != i) {
           ith_french_word_position_in_ef_map++;
+          if (ith_french_word_position_in_ef_map >= ef_map[english_word_id].size()) {
+            cout<<"The french word "<<i<<" should have been found in the ef map of english word "<<
+              english_word_id<<endl;
+            exit(1);
+            //break;
+          }
         }
+        /*
+        if (i == 0) { //if the french word is null
+          cout<<"The size of map for english word "<<english_word_id<<" is "<<
+            ef_map[english_word_id].size()<<endl;
+          cout<<" the null french word was found in the "<<ith_french_word_position_in_ef_map
+            <<" entry of english word "<<english_word_id<<endl;
+          getchar();
+        }
+        */
         ef_map[english_word_id][ith_french_word_position_in_ef_map].second = j;
         //cout<<"The french word "<<i<<" is in the "<<ith_french_word_position_in_ef_map<<" position of "
         //  "the english word "<<english_word_id<<" which is in the "<<j<<" position of the french word"<<endl;
@@ -225,6 +251,7 @@ void tmodel<COUNT, PROB>::printCountTable(const char *filename,
      //
      // c(target_word/source_word) source_word target_word
 {
+  //cerr<<"We are in print count table"<<endl;
   ofstream of(filename);
   typename hash_map<wordPairIds, CPPair, hashpair, equal_to<wordPairIds> >::const_iterator i;
   for(i = ef.begin(); i != ef.end();++i){
@@ -245,6 +272,8 @@ void tmodel<COUNT, PROB>::printProbTable(const char *filename,
      //
      // source_word target_word p(target_word/source_word)
 {
+
+  cout<<"We are in print count table"<<endl;
   ofstream of(filename);
   typename hash_map<wordPairIds, CPPair, hashpair, equal_to<wordPairIds> >::const_iterator i;
   for(i = ef.begin(); i != ef.end();++i)

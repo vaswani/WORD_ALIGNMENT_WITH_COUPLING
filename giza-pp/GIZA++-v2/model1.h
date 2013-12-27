@@ -90,8 +90,12 @@ public:
   void initialize_table_uniformly(sentenceHandler& sHandler1);
   int em_with_tricks(int noIterations, 
 		      bool seedModel1, Dictionary& dictionary, bool useDict);
-  int em_with_tricks_single_iter(int iterationNumber, 
-		      bool seedModel1, Dictionary& dictionary, bool useDict);
+  int em_with_tricks_e_step(int iterationNumber, 
+		      bool seedModel1, 
+          Dictionary& dictionary,
+          bool useDict,
+          string model_prefix);
+  void printTableAndReport(int it,string model_prefix);
   void load_table(const char* tname);
   void readVocabFile(const char* fname, Vector<WordEntry>& vlist, int& vsize, 
 		     int& total);
