@@ -165,16 +165,16 @@ void model1::printTableAndReport(int it,
   } while((n /= 10) > 0);
 
   string tfile = Prefix + ".t" + model_prefix + "." + shortModelName + "." + number ;
-  cout << modelName << ": ("<<it<<") TRAIN CROSS-ENTROPY " << perp.cross_entropy()
+  cout << modelName << ": ("<<it<<") TRAIN CROSS-ENTROPY for model "<<model_prefix<<" is:"<< perp.cross_entropy()
     << " PERPLEXITY " << perp.perplexity() << '\n';
   if (testPerp && testHandler)
-    cout << modelName << ": ("<<it<<") TEST CROSS-ENTROPY " << (*testPerp).cross_entropy()
+    cout << modelName << ": ("<<it<<") TEST CROSS-ENTROPY for model "<<model_prefix<<" is:" << (*testPerp).cross_entropy()
       << " PERPLEXITY " << (*testPerp).perplexity() 
       << '\n';
-  cout << modelName << ": ("<<it<<") VITERBI TRAIN CROSS-ENTROPY " << trainViterbiPerp.cross_entropy()
+  cout << modelName << ": ("<<it<<") VITERBI TRAIN CROSS-ENTROPY for model "<<model_prefix<<" is:" << trainViterbiPerp.cross_entropy()
  << " PERPLEXITY " << trainViterbiPerp.perplexity() << '\n';
   if (testPerp && testHandler)
-    cout << modelName << ": ("<<it<<") VITERBI TEST CROSS-ENTROPY " << (*testViterbiPerp).cross_entropy()
+    cout << modelName << ": ("<<it<<") VITERBI TEST CROSS-ENTROPY for model "<<model_prefix<<" is:" << (*testViterbiPerp).cross_entropy()
       << " PERPLEXITY " << (*testViterbiPerp).perplexity() 
       << '\n';
   if (dump_files){
@@ -349,6 +349,7 @@ void model1::em_loop(int it,Perplexity& perp, sentenceHandler& sHandler1, bool s
 	  cerr << "WARNING: denom is zero (TRAIN)\n";
       }
       cross_entropy += log(denom) ;
+      //cerr<<"Denom is "<<denom<<endl;
       if (!test){
 	if(denom > 0){	  
 	  COUNT val = COUNT(so) / (COUNT) double(denom) ;
@@ -405,6 +406,9 @@ void model1::em_loop(int it,Perplexity& perp, sentenceHandler& sHandler1, bool s
     } // end of for (j) ;
     sHandler1.setProbOfSentence(sent,cross_entropy);
     //cerr << sent << "CE: " << cross_entropy << " " << so << endl;
+
+    //cerr << sent << "CE: " << cross_entropy << endl;
+    //cerr<<"Cross Entropy for Sent is "<<cross_entropy<<endl;
     perp.addFactor(cross_entropy-m*log(l+1.0), so, l, m,1);
     viterbi_perp.addFactor(log(viterbi_score)-m*log(l+1.0), so, l, m,1);
     if (dump_alignment||(FEWDUMPS&&sent.sentenceNo<1000))

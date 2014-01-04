@@ -102,6 +102,7 @@ class vcbList{
   }
   void computeUnigramProbs();
   float getProbForWord(int i) {
+    //cerr<<"The size of vocab is "<<list.size()<<endl;
     return(list[i].prob);
   }
   

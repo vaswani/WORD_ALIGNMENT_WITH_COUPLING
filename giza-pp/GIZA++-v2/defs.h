@@ -55,6 +55,14 @@ extern double ETA ;
 extern int NUM_PGD_ITERATIONS;
 extern bool conditional_reg;
 extern bool joint_reg;
+extern bool l1_reg;
+extern bool l2_reg;
+
+
+enum regularization_func_type {
+  L1,
+  L2 
+};
 
 
 enum regularization_type {

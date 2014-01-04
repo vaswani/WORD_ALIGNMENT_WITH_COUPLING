@@ -107,11 +107,13 @@ public:
   inline int getNoFrenchWords(void)  const {return noFrenchWords;};
   inline tmodel<COUNT, PROB>& getTTable(void) {return tTable;};
   inline string& getEFFilename(void) {return efFilename;};
+
   // @vaswani T-table accessors
   const tmodel<COUNT, PROB> &getTtable() const {return tTable;};
   tmodel<COUNT, PROB> &getMutableTtable() {return tTable;};
 
   void normalizeTable() {tTable.normalizeTable(Elist, Flist);};
+  float getPerp(){return (perp.perplexity());};
 
  private:
   void em_loop(int it,Perplexity& perp, sentenceHandler& sHandler1, bool seedModel1, bool , const char*, Dictionary& dictionary, bool useDict, 

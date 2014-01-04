@@ -80,7 +80,7 @@ void projectPointsOntoSimplex(
     vector<vector<float> > &new_feasible_points) {
   int num_conditionals = new_feasible_points.size();
   #pragma omp parallel for firstprivate(num_conditionals) 
-  for( int i=0; i<num_conditionals;i++) {
+  for( int i=2; i<num_conditionals;i++) {
     if (new_points[i].size() > 0) {
       //cout<<"projecting point "<<i<<endl;
       //cout<<"projecting a point with size "<<new_points[i].size()<<endl;
@@ -90,7 +90,7 @@ void projectPointsOntoSimplex(
   //cout<<"We finished projecting points"<<endl; 
 }
 
-float L2_reg_func_value(
+float regFuncValue(
        const vector<vector<float> > &  ef_current_points,
        const vector<vector<float> > &  fe_current_points,
        const vector<float> &rowwiseExpCntsSum,
@@ -98,42 +98,56 @@ float L2_reg_func_value(
        float reg_lambda,
        vcbList &eTrainVcbList,
        vcbList &fTrainVcbList,
-       regularization_type reg_option) {
+       regularization_type reg_option,
+       regularization_func_type reg_func_option) {
  	int num_conditionals = ef_current_points.size();
 	float func_value = 0.0;
   #pragma omp parallel for firstprivate (num_conditionals) reduction(+ : func_value ) 
-	for (int i =0 ;i<num_conditionals;i++)
+	for (int i =2 ;i<num_conditionals;i++)
 	{ 
     float conditional_func_value = 0.;
     if (rowwiseExpCntsSum[i] == 0.) {
       continue;
     }
+	//cerr<<"The row is "<<i<<endl;
     for (unsigned int j=0; j<ef_map[i].size(); j++) {
+	  //cerr<<"the item is "<<j<<endl;
       unsigned int f_position =  ef_map[i][j].first;
       unsigned int e_position_in_f_row = ef_map[i][j].second;
+	  //cerr<<"the f position is "<<f_position<<endl;
+	  //cerr<<"the eposition in frow is "<<e_position_in_f_row<<endl;
+      float diff = 0.;
       if (reg_option == CONDITIONAL) {
-        float reg_term = ef_current_points[i][j] - 
-                    fe_current_points[f_position][e_position_in_f_row];
-        conditional_func_value += reg_term*reg_term;
+        diff = ef_current_points[i][j] - 
+                        fe_current_points[f_position][e_position_in_f_row];
       }
       if (reg_option == JOINT) {
-        float reg_term = ef_current_points[i][j]* eTrainVcbList.getProbForWord(i) - 
-          fe_current_points[f_position][e_position_in_f_row]*fTrainVcbList.getProbForWord(f_position);
-
-        conditional_func_value += reg_term*reg_term;
+	    //cerr<<ef_current_points[i][j]<<endl;
+	    //cerr<<fe_current_points[f_position][e_position_in_f_row]<<endl;
+		//cerr<<eTrainVcbList.getProbForWord(i)<<endl;
+		//cerr<<fTrainVcbList.getProbForWord(f_position)<<endl;
+        diff = ef_current_points[i][j]*fTrainVcbList.getProbForWord(i) -
+            fe_current_points[f_position][e_position_in_f_row]*eTrainVcbList.getProbForWord(f_position);
+		//cerr<<"diff is "<<diff<<endl;
+      }
+      if (reg_func_option == L2) {
+        conditional_func_value += diff*diff;
+      }
+      if (reg_func_option == L1) {
+        conditional_func_value += abs(diff);
       }
     }
-    /*
-    // THIS IS IF THE CONSTRAINTS ARE ON THE JOINTS
-    for (unsigned int j=0; j<ef_map[i].size(); j++) {
-      unsigned int f_position =  ef_map[i][j].first;
-      double reg_term = ef_current_points[i][j]* eTrainVcbList[i] - 
-                    fe_current_points[f_position][e_position_in_f_row]*fTrainVcbList[f_position];
-      conditional_func_value += reg_term*reg_term;
-    */
+
     func_value += conditional_func_value;
   }
-  //cout<<"the l2 reg function value inside the loop was "<<func_value<<endl;
+  /*
+  if (reg_func_option == L2) {
+    cerr<<"The unweighted l2 reg function value is "<<func_value<<endl;
+  }
+  if (reg_func_option == L1) {
+    cerr<<"The unweighted l1 reg function value is "<<func_value<<endl;
+  }
+  */
   //cout<<"reg_lambda was "<<reg_lambda<<endl;
   return (func_value*reg_lambda);
    
@@ -147,7 +161,7 @@ float parallelExpectedLLCompute(
 	float func_value = 0.0;
 
   #pragma omp parallel for firstprivate (num_conditionals) reduction(+ : func_value ) 
-	for (int i =0 ;i<num_conditionals;i++)
+	for (int i =2 ;i<num_conditionals;i++)
 	{
     // NO NEED TO PERFORM COMPUTATION IF THE EXPECTED COUNTS SUM WAS
     // ZERO
@@ -183,7 +197,7 @@ float parallelExpectedLLCompute(
 // COMPUTING THE FUNCION VALUE AT THE CURRENT POINT. WE ARE PERFORMING
 // PROJECTED GRADIENT DESCENT ON THE NEGATIVE OF THE FUNCTION VALUE
 // i.e PROJECTED GRADIENT ASCENT
-inline float evalFunction(
+void evalFunction(
     const vector<vector<float> > & ef_expected_counts,
     const vector<vector<float> > & ef_current_points,
     const vector<float> & ef_rowwiseExpCntsSum,
@@ -194,26 +208,30 @@ inline float evalFunction(
     const vector<vector<pair<unsigned int,unsigned int> > > &ef_map,
     vcbList &eTrainVcbList,
     vcbList &fTrainVcbList,
-    regularization_type reg_option)
+    regularization_type reg_option,
+    regularization_func_type reg_func_option,
+    float *exp_complete_ll_term_value,
+    float *reg_term_value)
 {
   //cout<<"In eval function"<<endl;
-  float func_value = 0.;
-  float L2_func_value;
+  //float func_value = 0.;
+  //float reg_func_value=0;
   // FIRST COMPUTING THE EXPECTED COMPLETE DATA LOG LIKELIHOOD IN e given f directiona
-  //cout<<"Computing expected complete data LL in the e|f direction"<<endl;
-  func_value -= parallelExpectedLLCompute(
+  //cerr<<"Computing expected complete data LL in the e|f direction"<<endl;
+  (*exp_complete_ll_term_value) -= parallelExpectedLLCompute(
     ef_expected_counts,
     ef_current_points,
     ef_rowwiseExpCntsSum);
 
-  //cout<<"Computing expected complete data LL in the f|e direction"<<endl;
-  func_value -= parallelExpectedLLCompute(
+  //cerr<<"Computing expected complete data LL in the f|e direction"<<endl;
+  (*exp_complete_ll_term_value) -= parallelExpectedLLCompute(
     fe_expected_counts,
     fe_current_points,
     fe_rowwiseExpCntsSum);
   // Now computing the regularization constant. 
   // For now, the L2 norm
-   L2_func_value += L2_reg_func_value(
+   //cerr<<"Computing the function value for the l2 term"<<endl;
+   (*reg_term_value) += regFuncValue(
        ef_current_points,
        fe_current_points,
        ef_rowwiseExpCntsSum,
@@ -221,13 +239,22 @@ inline float evalFunction(
        reg_lambda,
        eTrainVcbList,
        fTrainVcbList,
-       reg_option);
-   func_value += L2_func_value;
-   cerr<<"The L2 reg func value was "<<L2_func_value<<endl;
-	return(func_value);
+       reg_option,
+       reg_func_option);
+   //func_value += reg_func_value;
+   /*
+   if (reg_func_option == L1) {
+    cerr<<"The l1 reg func value was "<<reg_func_value<<endl;
+   }
+   if (reg_func_option == L2) {
+    cerr<<"The l2 reg func value was "<<reg_func_value<<endl;
+   }
+  */
+	//return(func_value);
+  return;
 }
 
-void L2_reg_gradient(
+void regGradient(
       const vector<vector<float> > &ef_current_points,
       vector<vector<float> > &ef_gradients,
       const vector<vector<float> > &fe_current_points,
@@ -236,39 +263,69 @@ void L2_reg_gradient(
       const vector<vector<pair<unsigned int,unsigned int> > > &ef_map,
       vcbList &eTrainVcbList,
       vcbList &fTrainVcbList,
-      regularization_type reg_option) {
+      regularization_type reg_option,
+      regularization_func_type reg_func_option) {
   
   //First computing the gradient in the ef direction
   int num_conditionals = ef_current_points.size();
   #pragma omp parallel for firstprivate(num_conditionals)
-  for(int i=0; i<num_conditionals; i++) {
+  for(int i=2; i<num_conditionals; i++) {
     for (unsigned int j=0; j<ef_map[i].size(); j++) {
       unsigned int f_position =  ef_map[i][j].first;
       unsigned int e_position_in_f_row = ef_map[i][j].second;
+      float e_prob = eTrainVcbList.getProbForWord(f_position);
+      float f_prob = fTrainVcbList.getProbForWord(i);
+      float diff = 0;
       if (reg_option == CONDITIONAL) {
-        float gradient_value = reg_lambda*2*(ef_current_points[i][j] - 
-                      fe_current_points[f_position][e_position_in_f_row]);
-        ef_gradients[i][j] += gradient_value;
-        fe_gradients[f_position][e_position_in_f_row] -= gradient_value;
+        diff = ef_current_points[i][j] - 
+                        fe_current_points[f_position][e_position_in_f_row];
       }
       if (reg_option == JOINT) {
-        float gradient_value = reg_lambda*2*(ef_current_points[i][j]*eTrainVcbList.getProbForWord(i) - 
-            fe_current_points[f_position][e_position_in_f_row])*fTrainVcbList.getProbForWord(f_position);
-        ef_gradients[i][j] += gradient_value;
-        fe_gradients[f_position][e_position_in_f_row] -= gradient_value;
+        diff = ef_current_points[i][j]*f_prob -
+            fe_current_points[f_position][e_position_in_f_row]*e_prob;
       }
+      float fe_gradient_value =0;
+      float ef_gradient_value =0;
+      if (reg_func_option == L2) {
+        if (reg_option == CONDITIONAL) {
+          float gradient_value = 2*diff;
+          ef_gradient_value = gradient_value;
+          fe_gradient_value = -gradient_value;
+        }
+        if (reg_option == JOINT) {
+          ef_gradient_value = 2*diff*f_prob;
+          fe_gradient_value = -2*diff*e_prob;
+        }
+      }
+      if (reg_func_option == L1) {
+        if (diff > 0) {
+          if (reg_option == CONDITIONAL) {
+          ef_gradient_value = 1;
+          fe_gradient_value = -1;
+          }
+          if (reg_option == JOINT) {
+            ef_gradient_value = f_prob;
+            fe_gradient_value = -e_prob;
+          }
+        }
+        if (diff < 0) {
+          if (reg_option == CONDITIONAL) {
+            ef_gradient_value = -1;
+            fe_gradient_value = 1;
+          }
+          if (reg_option == JOINT) {
+            ef_gradient_value = -f_prob;
+            fe_gradient_value = e_prob;
+          }
+        }
+      }
+      //cerr<<"ef gradient value is "<<ef_gradient_value<<endl;
+      //cerr<<"fe gradient value is "<<fe_gradient_value<<endl;
+      ef_gradients[i][j] += reg_lambda*ef_gradient_value;
+      fe_gradients[f_position][e_position_in_f_row] += reg_lambda*fe_gradient_value;
     }
-    /*
-    // THIS IS IF THE CONSTRAINTS ARE ON THE JOINTS
-    for (unsigned int j=0; j<ef_current_points[i].size(); j++) {
-      unsigned int f_position =  ef_map[i][j].first;
-      float gradient_value = 2*(ef_current_points[i][j]*eTrainVcbList[i] - 
-                    fe_current_points[f_position][e_position_in_f_row])*fTrainVcbList[f_position];
-      ef_gradients[i][j] += gradient_value;
-      fe_gradients[f_position][e_position_in_f_row] -= gradient_value;
-    */
-
   }
+
 }
 void evalGradientFromExpLogLikelihood(
     const vector<vector<float> > &expected_counts,
@@ -278,7 +335,7 @@ void evalGradientFromExpLogLikelihood(
   //First evaluating the gradients from the expected complete data log likeliood
 	int num_conditionals = expected_counts.size();
   #pragma omp parallel for firstprivate(num_conditionals)
-	for (int i =0; i<num_conditionals; i++)
+	for (int i =2; i<num_conditionals; i++)
 	{
     if (rowwiseExpCntsSum[i] == 0) {
       continue;
@@ -311,7 +368,8 @@ void inline evalGradient(
       const vector<vector<pair<unsigned int,unsigned int> > > &ef_map,
       vcbList &eTrainVcbList,
       vcbList &fTrainVcbList,
-      regularization_type reg_option) {
+      regularization_type reg_option,
+      regularization_func_type reg_func_option) {
 
   evalGradientFromExpLogLikelihood(
       ef_expected_counts,
@@ -324,7 +382,7 @@ void inline evalGradient(
       fe_current_points,
       fe_gradients);
 
-  L2_reg_gradient(
+  regGradient(
       ef_current_points,
       ef_gradients,
       fe_current_points,
@@ -333,7 +391,8 @@ void inline evalGradient(
       ef_map,
       eTrainVcbList,
       fTrainVcbList,
-      reg_option);
+      reg_option,
+      reg_func_option);
 }
 
 void zeroInitVectorOfVector(
@@ -364,7 +423,7 @@ void getSingleInterpolatedPoints(
     float current_alpha)  {
   int num_conditionals = new_feasible_points.size();
   #pragma omp parallel for firstprivate(num_conditionals)
-  for (int i=0; i<num_conditionals; i++) {
+  for (int i=2; i<num_conditionals; i++) {
     for (unsigned int j=0; j<new_feasible_points[i].size(); j++) {
       temp_points[i][j] = (1.0 - current_alpha) * current_points[i][j] + current_alpha * new_feasible_points[i][j];
     }
@@ -399,7 +458,7 @@ void singleGradientStep(
     float eta) {
   int num_conditionals = new_points.size();
   #pragma omp parallel for firstprivate(num_conditionals)
-  for (int i=0; i<num_conditionals; i++) {
+  for (int i=2; i<num_conditionals; i++) {
     for (unsigned int j=0; j<new_points[i].size(); j++) {
       new_points[i][j] = current_points[i][j] - eta*gradients[i][j];
     }
@@ -427,7 +486,24 @@ void takeGradientStep(
       eta);
 }
 
-void projectedGradientDescentWithArmijoRule(
+void reNormalize(
+    const vector<float> &expected_counts,
+    const float expected_counts_sum,
+    vector<float> &new_point) {
+  if (expected_counts_sum == 0 ) {
+    // assign uniform probabilities
+    float unif_prob = 1.0/new_point.size();
+    for (unsigned int i=0;i<new_point.size();i++) {
+      new_point[i] = unif_prob;
+    }
+  } else {
+    for (unsigned int i=0;i<new_point.size();i++) {
+      new_point[i] = expected_counts[i]/expected_counts_sum;
+    }
+  }
+  return;
+}
+float projectedGradientDescentWithArmijoRule(
     const vector<vector<float> > & ef_expected_counts,
     const vector<vector<float> > & ef_current_probs,
     const vector<float> & ef_rowwiseExpCntsSum,
@@ -440,7 +516,8 @@ void projectedGradientDescentWithArmijoRule(
     const vector<vector<pair<unsigned int,unsigned int> > > &ef_map,
     vcbList &eTrainVcbList,
     vcbList &fTrainVcbList,
-    regularization_type reg_option) {
+    regularization_type reg_option,
+    regularization_func_type reg_func_option) {
   float eta = ETA;
   cerr<<"the regularization option is "<<reg_option<<endl;
   /*
@@ -458,24 +535,48 @@ void projectedGradientDescentWithArmijoRule(
   //cout<<"the size of ef current points is "<<ef_current_points<<endl;
   //cout<<"the size of fe current points is "<<fe_current_points<<endl;
 	//cout <<"the number of PGD iterations is "<<NUM_PGD_ITERATIONS<<endl;
-  cerr<<"Performing PGD iterations"<<endl;
+  float current_function_value;
+  float exp_complete_ll_term_value = 0.;
+  float reg_term_value=0;
+  //For the null word, i.e. the zeroth word, we should just run the regular
+  //m-step in each direction.
+  reNormalize(
+    ef_expected_counts[0],
+    ef_rowwiseExpCntsSum[0],
+    ef_current_points[0]);
+  reNormalize(
+    fe_expected_counts[0],
+    fe_rowwiseExpCntsSum[0],
+    fe_current_points[0]);
+  cerr<<"Finished renormalizing the null probs"<<endl;
+  //Running PGD for the rest of the parameters
+  evalFunction(
+    ef_expected_counts,
+    ef_current_points,
+    ef_rowwiseExpCntsSum,
+    fe_expected_counts,
+    fe_current_points,
+    fe_rowwiseExpCntsSum,
+    reg_lambda,
+    ef_map,
+    eTrainVcbList,
+    fTrainVcbList,
+    reg_option,
+    reg_func_option,
+    &exp_complete_ll_term_value,
+    &reg_term_value);
+  current_function_value = exp_complete_ll_term_value + reg_term_value;
+  float current_reg_term_value = reg_term_value;
+  cerr<<"The starting expected complete data log likelihood was "<<exp_complete_ll_term_value<<endl;
+  cerr<<"The starting reg term was "<<reg_term_value<<endl;
+  cerr<<"The starting function value is: "<<current_function_value<<endl;
+
+  cerr<<"Performing "<<NUM_PGD_ITERATIONS<< "PGD iterations"<<endl;
 	for (int time = 1; time <= NUM_PGD_ITERATIONS; time++)
 	{
-    eta = eta /time;
-		cerr<<"time is"<<time<<endl;
-		float current_function_value = evalFunction(
-      ef_expected_counts,
-      ef_current_points,
-      ef_rowwiseExpCntsSum,
-      fe_expected_counts,
-      fe_current_points,
-      fe_rowwiseExpCntsSum,
-      reg_lambda,
-      ef_map,
-      eTrainVcbList,
-      fTrainVcbList,
-      reg_option);
-    cerr<<"The function value was "<<current_function_value<<endl;
+    //eta = eta/time;
+		cerr<<"time: "<<time<<" eta:"<<eta<<endl;
+
     //cerr<<"initializing current gradient"<<endl;
     // INITIAZLIZING THE CURRENT GRADIENTS 
 		vector<vector<float> > ef_gradients,fe_gradients;
@@ -500,7 +601,8 @@ void projectedGradientDescentWithArmijoRule(
       ef_map,
       eTrainVcbList,
       fTrainVcbList,
-      reg_option);
+      reg_option,
+      reg_func_option);
     
     vector<vector<float> > ef_new_points,fe_new_points;
     ef_new_points = vector<vector<float> >(ef_current_probs.size());
@@ -585,10 +687,12 @@ void projectedGradientDescentWithArmijoRule(
 		float final_alpha = 0.0 ; //if the function value does not improve at all, then the armijo beta should be 1
 		float current_armijo_bound = armijo_bound;
 		float best_func_value = current_function_value;
+    float best_reg_term_value = reg_term_value;
 		bool no_update = 1;
 		//cout<<"current function value is "<<current_function_value<<endl;
 		//printf ("current function value is %.15f\n",current_function_value);
-		while(terminate_line_srch != 1 && num_steps <= 10)
+    cerr<<"The best func value before staring line search was "<<best_func_value<<endl;
+		while(terminate_line_srch != 1 && num_steps <= 20)
 		{	
 			//cout<<"current armijo bound is "<<current_armijo_bound<<endl;
 			//cout<<"we are in teh while loop"<<endl;
@@ -627,7 +731,10 @@ void projectedGradientDescentWithArmijoRule(
 				temp_point[i] = (1.0 - current_alpha) * current_point[i] + current_alpha * new_feasible_point[i];
 			}
       */
-      float func_value_at_temp_point = evalFunction(
+      float func_value_at_temp_point;
+      float exp_complete_ll_term_at_temp_point_value = 0;
+      float reg_term_at_temp_point_value =0;
+      evalFunction(
         ef_expected_counts,
         ef_temp_points,
         ef_rowwiseExpCntsSum,
@@ -638,14 +745,19 @@ void projectedGradientDescentWithArmijoRule(
         ef_map,
         eTrainVcbList,
         fTrainVcbList,
-        reg_option);
-			//cout<<"function value at temp point is "<<func_value_at_temp_point<<endl;
+        reg_option,
+        reg_func_option,
+        &exp_complete_ll_term_at_temp_point_value,
+        &reg_term_at_temp_point_value);
+      func_value_at_temp_point = exp_complete_ll_term_at_temp_point_value + reg_term_at_temp_point_value;
+			//cerr<<"function value at alpha"<<current_alpha<<" is "<<func_value_at_temp_point<<endl;
 			//printf ("function value at temp point is %.15f and the iteration number is %d \n",func_value_at_temp_point,num_steps);
 			//printf ("current alpha is %.15f\n",current_alpha);
 			//getchar();
 			if (func_value_at_temp_point < best_func_value)
 			{
 				best_func_value = func_value_at_temp_point;
+        best_reg_term_value = reg_term_at_temp_point_value;
 				final_alpha = current_alpha;
 				no_update = 0;
 				//cout<<"we arrived at a better function value"<<endl;
@@ -663,6 +775,7 @@ void projectedGradientDescentWithArmijoRule(
 			num_steps += 1;
 			//getchar();
 		}
+    //cerr<<"The best function value at the end of line search was "<<best_func_value<<" at alpha "<<final_alpha<<endl;
 		//printf ("final alpha was %f\n",final_alpha);
 		//cout<<"the value of not update was "<<no_update<<endl;
 		//getchar();
@@ -678,6 +791,8 @@ void projectedGradientDescentWithArmijoRule(
         fe_current_points,
         fe_current_points,
         final_alpha);
+      current_function_value = best_func_value;
+      current_reg_term_value = best_reg_term_value;
       /*
 			//next_point.resize(num_elements);
 			for (int i =0 ;i<num_elements;i++)
@@ -691,7 +806,7 @@ void projectedGradientDescentWithArmijoRule(
 		}
 		else
 		{
-			//cout<<" not update was true"<<endl;
+			cerr<<"Terminating early from PGD because there was no update in line search"<<endl;
 			break;
 		}
 
@@ -700,6 +815,7 @@ void projectedGradientDescentWithArmijoRule(
   //Storing the optimized probs in the new point
   ef_optimized_probs = ef_current_points;
   fe_optimized_probs = fe_current_points;
+  return(current_reg_term_value);
 }
 
 

@@ -58,11 +58,13 @@ GLOBAL_PARAMETER3(int,Model6_Iterations,"Model6_Iterations","NO. ITERATIONS MODE
 GLOBAL_PARAMETER(float, REG_LAMBDA,"regLambda","Lambda for the regularlization",PARLEV_OPTHEUR,1e-5);
 GLOBAL_PARAMETER(float, PROB_SMOOTH,"probSmooth","probability smoothing (floor) value ",PARLEV_OPTHEUR,1e-7);
 GLOBAL_PARAMETER(float, MINCOUNTINCREASE,"minCountIncrease","minimal count increase",PARLEV_OPTHEUR,1e-7);
-GLOBAL_PARAMETER(double, ARMIJO_BETA,"armijo_beta","pgd optimization parameter beta used in armijo line search",PARLEV_EM,0.1);
-GLOBAL_PARAMETER(double, ETA,"eta","pgd optimization parameter eta used in armijo line search",PARLEV_EM,0.9);
+GLOBAL_PARAMETER(double, ARMIJO_BETA,"armijo_beta","pgd optimization parameter beta used in armijo line search",PARLEV_EM,0.9);
+GLOBAL_PARAMETER(double, ETA,"eta","pgd optimization parameter eta used in armijo line search",PARLEV_EM,0.5);
 GLOBAL_PARAMETER(int, NUM_PGD_ITERATIONS,"num_pgd_iterations","number of pgd iterations we need to carry out",PARLEV_EM,100);
 GLOBAL_PARAMETER(bool,conditional_reg,"conditional_regularization","Do regularization of the conditionals",PARLEV_EM,0);
-GLOBAL_PARAMETER(bool,joint_reg,"joint_regularization","Do regularization of the joint parameters",PARLEV_EM,0);
+GLOBAL_PARAMETER(bool,joint_reg,"joint_regularization","Do regularization of the joint parameters",PARLEV_EM,1);
+GLOBAL_PARAMETER(bool,l2_reg,"l2_regularization","Do l2 squared regularization of the parameters",PARLEV_EM,1);
+GLOBAL_PARAMETER(bool,l1_reg,"l1_regularization","Do l1 regularization of the parameters",PARLEV_EM,0);
 
 GLOBAL_PARAMETER2(int,Transfer_Dump_Freq,"TRANSFER DUMP FREQUENCY","t2to3","output: dump of transfer from Model 2 to 3",PARLEV_OUTPUT,0);
 GLOBAL_PARAMETER2(bool,Verbose,"verbose","v","0: not verbose; 1: verbose",PARLEV_OUTPUT,0);
@@ -696,10 +698,16 @@ double StartTraining(int&result)
   
   vector<vector<pair<unsigned int,unsigned int> > > ef_map;
   ef_m1.getTtable().buildEFMap(ef_map,fe_m1.getTtable().getLexmat());
+  /*
   cout<< "RUNNING REGULAR MODEL 1"<<endl;
 	minIter=m1.em_with_tricks(Model1_Iterations,seedModel1,*dictionary, useDict);
-
+  //RUNNING THE STANDARD M STEP FOR m1
+  //m1.normalizeTable();
+  //printCounts(probsVec);
+  //getchar();
+  */
   // RUNNING THE MODELS IN BOTH DIRECTOINS, ONE ITERATION AT A TIME
+  float current_reg_term_value = 0.;
   for (int it=1; it<=Model1_Iterations; it++) {
     //cout<<" Running regular model 1 for iteration "<<it<<endl;
     //minIter=m1.em_with_tricks_e_step(it,seedModel1,*dictionary, useDict);
@@ -708,15 +716,17 @@ double StartTraining(int&result)
     cout<<" Running f given e model 1 for iteration "<<it<<endl;
     fe_minIter=fe_m1.em_with_tricks_e_step(it,seedModel1,*dictionary, useDict,"fe");
     vector<vector<float> > ef_optimizedProbs,fe_optimizedProbs;
+    cerr<<"The total objective function value in iteration "<<it<<" was "<<-ef_corpus->getTotalNoPairs2()*log(ef_m1.getPerp()) -fe_corpus->getTotalNoPairs2()*log(fe_m1.getPerp())-current_reg_term_value<<endl;
     //RUNNING THE PGD M STEP for ef_m1 and fe_m1
     if (it >= 2) {
-      runPGDMStep(
+      current_reg_term_value = runPGDMStep(
           ef_m1,
           fe_m1,
           REG_LAMBDA,
           ef_map,
           eTrainVcbList,
           fTrainVcbList);
+      cerr<<"The current reg term value was "<<current_reg_term_value<<endl;
     } else {
       ef_m1.normalizeTable();
       fe_m1.normalizeTable();
@@ -726,10 +736,6 @@ double StartTraining(int&result)
 
     // Assgining the optimized probabilities
     
-    //RUNNING THE STANDARD M STEP FOR m1
-    m1.normalizeTable();
-    //printCounts(probsVec);
-    //getchar();
   }
    /*
    cout << "RUNNING E GIVEN F DIRECTION"<<endl;

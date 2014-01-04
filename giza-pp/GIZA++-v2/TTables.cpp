@@ -160,7 +160,7 @@ void tmodel<COUNT,PROB>::buildEFMap(
         unsigned int english_word_id = (*target_lexmat[i])[j].first;
         // You have to first search where the french word id lies
         // in the row of english word
-        int ith_french_word_position_in_ef_map = 0;
+        unsigned int ith_french_word_position_in_ef_map = 0;
         while(ef_map[english_word_id][ith_french_word_position_in_ef_map].first != i) {
           ith_french_word_position_in_ef_map++;
           if (ith_french_word_position_in_ef_map >= ef_map[english_word_id].size()) {
