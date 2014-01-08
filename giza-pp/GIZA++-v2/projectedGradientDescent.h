@@ -417,8 +417,8 @@ void initGradientsToZero(
 }
 
 void getSingleInterpolatedPoints(
-    const vector<vector<float> > &new_feasible_points,
-    const vector<vector<float> > &current_points,
+    vector<vector<float> > &new_feasible_points,
+    vector<vector<float> > &current_points,
     vector<vector<float> > &temp_points,
     float current_alpha)  {
   int num_conditionals = new_feasible_points.size();
@@ -432,11 +432,11 @@ void getSingleInterpolatedPoints(
 }
 
 void getInterpolatedPoints(
-    const vector<vector<float> > &ef_new_feasible_points,
-    const vector<vector<float> > &ef_current_points,
+    vector<vector<float> > &ef_new_feasible_points,
+    vector<vector<float> > &ef_current_points,
     vector<vector<float> > &ef_temp_points,
-    const vector<vector<float> > &fe_new_feasible_points,
-    const vector<vector<float> > &fe_current_points,
+    vector<vector<float> > &fe_new_feasible_points,
+    vector<vector<float> > &fe_current_points,
     vector<vector<float> > &fe_temp_points,
     float current_alpha) {
 
@@ -814,7 +814,15 @@ float projectedGradientDescentWithArmijoRule(
 	//new_prob = current_point;
   //Storing the optimized probs in the new point
   ef_optimized_probs = ef_current_points;
+  /*
+  cout<<"The size of ef_optimized probs is "<<ef_optimized_probs.size()<<endl;
+  for (int i=0;i<ef_optimized_probs.size();i++) {
+    cout<<"ith vector is "<<endl;
+    printVector(ef_optimized_probs[i]);
+  }
+  getchar();
   fe_optimized_probs = fe_current_points;
+  */
   return(current_reg_term_value);
 }
 
